@@ -13,9 +13,12 @@ use common_game::{
         ComplexResourceType,
         GenericResource::{self, ComplexResources},
         ResourceType,
-    }, protocols::{
-        orchestrator_explorer::{OrchestratorToExplorerKind::KillExplorer, *}, planet_explorer::{ExplorerToPlanet, PlanetToExplorer},
-    }, utils::ID,
+    },
+    protocols::{
+        orchestrator_explorer::{OrchestratorToExplorerKind::KillExplorer, *},
+        planet_explorer::{ExplorerToPlanet, PlanetToExplorer},
+    },
+    utils::ID,
 };
 use crossbeam_channel::{Receiver, Sender};
 use explorer_common::{AiReturn, Bag, BagContent};
@@ -311,16 +314,16 @@ impl Explorer {
         }
     }
 
-    fn generate_resource_request(&mut self, resource : BasicResourceType) -> Result<bool,AiReturn>{
+    fn generate_resource_request(&mut self, resource: BasicResourceType) -> Result<bool, AiReturn> {
         match self.send_planet_request(PlanetRequest::GenerateResource(resource))? {
             PlanetResponse::GeneratedResource(Some(basic_resource)) => {
-                self.bag.add_resource(GenericResource::BasicResources(basic_resource));
+                self.bag
+                    .add_resource(GenericResource::BasicResources(basic_resource));
                 Ok(true)
-            },
+            }
             PlanetResponse::GeneratedResource(None) => Ok(false),
             _ => Err(AiReturn::Kill),
         }
-        
     }
 
     fn send_planet_request(&self, request: PlanetRequest) -> Result<PlanetResponse, AiReturn> {
@@ -625,8 +628,8 @@ impl ExplorerTrait for Explorer {
             false
         });
 
-        match (path,resource_to_act_on) {
-            (Some(path),Some(resource)) => {
+        match (path, resource_to_act_on) {
+            (Some(path), Some(resource)) => {
                 info!(
                     "Selected path {:?}",
                     path.iter().map(|step| step.borrow().id)
@@ -634,9 +637,11 @@ impl ExplorerTrait for Explorer {
                 if let Err(err) = self.traverse_path(path) {
                     return err;
                 };
-                
+
                 match resource {
-                    ResourceType::Basic(basic_resource_type) => {self.generate_resource_request(basic_resource_type);},
+                    ResourceType::Basic(basic_resource_type) => {
+                        self.generate_resource_request(basic_resource_type);
+                    }
                     ResourceType::Complex(complex_resource_type) => todo!(),
                 }
             }

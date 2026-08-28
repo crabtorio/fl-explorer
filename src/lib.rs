@@ -402,7 +402,25 @@ impl ExplorerTrait for Explorer {
     }
 
     fn explorer_ai(&mut self) -> explorer_common::AiReturn {
-        todo!()
+        
+        //Exploration loop.
+        //Explore until the entire galaxy is explored.
+        fn explore_recursive(explorer: &mut Explorer) -> Result<(),AiReturn>{
+            
+            explorer.explore_current_planet()?;
+            for neighbor in &explorer.current_planet.clone().borrow().neighbors {
+                if !neighbor.borrow().is_explored() {
+                    explore_recursive(explorer)?;
+                }
+            };
+            
+            Ok(())
+        }
+
+        match explore_recursive(self) {
+            Ok(()) => AiReturn::Stop,
+            Err(err) => err
+        }
     }
 
     fn reset(&mut self) {
@@ -416,4 +434,6 @@ impl ExplorerTrait for Explorer {
 
 // The tested functions were moved to explorer_common
 #[cfg(test)]
-mod tests {}
+mod tests {
+    
+}

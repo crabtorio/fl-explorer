@@ -435,9 +435,10 @@ impl ExplorerTrait for Explorer {
         //Explore until the entire galaxy is explored.
         fn explore_recursive(
             explorer: &mut Explorer,
-            source_planet: PlanetNode,
+            source_planet: Option<PlanetNode>,
         ) -> Result<(), AiReturn> {
             loop {
+                //I explore every time just in case something changed
                 explorer.explore_current_planet()?;
                 let mut all_explored = true;
                 let initial_planet = explorer.current_planet.clone();
@@ -453,20 +454,31 @@ impl ExplorerTrait for Explorer {
                     }
                 }
                 if all_explored {
-                    log::info!(
-                        "All planets explored here, backtracking to {}",
-                        source_planet.borrow().id
-                    );
-                    explorer.travel_to_planet_request(source_planet)?;
+                    match source_planet {
+                        Some(source_planet) => {
+                            log::info!(
+                                "All planets explored here, backtracking to {}",
+                                source_planet.borrow().id
+                            );
+
+                            explorer.travel_to_planet_request(source_planet)?;
+                        }
+                        None => {
+                            log::info!(
+                                "All planets in the galaxy explored.",
+                            );
+                        },
+                    }
+
                     return Ok(());
                 } else {
-                    explore_recursive(explorer, initial_planet)?;
+                    explore_recursive(explorer, Some(initial_planet))?;
                 }
             }
         }
-        match explore_recursive(self, self.current_planet.clone()) {
+        match explore_recursive(self, None) {
             Ok(()) => {
-                log::info!(
+                log::trace!(
                     "Done exploring the galaxy. galaxy contents: \n{:?}",
                     self.map.0
                 );

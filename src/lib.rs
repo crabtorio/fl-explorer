@@ -178,42 +178,51 @@ impl PlanetMap {
     /// The path is inclusive of `start` and `end`
     fn find_path<F: FnMut(&PlanetNode) -> bool>(
         start: &PlanetNode,
-        op: F,
+        mut op: F,
     ) -> Option<LinkedList<PlanetNode>> {
         fn compute_path<F: FnMut(&PlanetNode) -> bool>(
-            prev_nodes: LinkedList<PlanetNode>,
             current_node: &PlanetNode,
-            mut op: F,
+            path: &LinkedList<PlanetNode>,
+            op: &mut F,
         ) -> Option<LinkedList<PlanetNode>> {
-            let mut solution: Option<LinkedList<PlanetNode>> = None;
+            let mut best_solution: Option<LinkedList<PlanetNode>> = None;
+
             for neighbor in &current_node.borrow().neighbors {
-                //We don't want loops
-                if prev_nodes.contains(&neighbor) {
+                //We don't want loops.
+                if path.contains(neighbor) {
                     continue;
                 }
 
-                let mut current_path = prev_nodes.clone();
+                let mut current_path = path.clone();
                 current_path.push_back(neighbor.clone());
 
+                // Found a matching planet.
                 if op(neighbor) {
                     return Some(current_path);
                 }
-                solution = match (solution, compute_path(current_path, neighbor, &mut op)) {
-                    (Some(prev_solution), Some(new_solution)) => {
-                        if new_solution.len() < prev_solution.len() {
-                            Some(new_solution)
-                        } else {
-                            Some(prev_solution)
-                        }
+
+                // Search recursively.
+                if let Some(new_solution) = compute_path(neighbor, &current_path, op) {
+                    match &best_solution {
+                        Some(previous) if previous.len() <= new_solution.len() => {}
+                        _ => best_solution = Some(new_solution),
                     }
-                    (None, Some(new_solution)) => Some(new_solution),
-                    (prev_solution, None) => prev_solution,
-                };
+                }
             }
-            solution
+
+            best_solution
         }
 
-        compute_path(LinkedList::new(), start, op)
+        // The path must include the starting planet.
+        let mut initial_path = LinkedList::new();
+        initial_path.push_back(start.clone());
+
+        // If the start itself matches, return [start].
+        if op(start) {
+            return Some(initial_path.clone());
+        }
+
+        compute_path(start, &initial_path, &mut op)
     }
 
     fn find_path_to_node(start: &PlanetNode, end: &PlanetNode) -> Option<LinkedList<PlanetNode>> {

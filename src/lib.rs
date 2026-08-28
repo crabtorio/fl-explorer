@@ -1,15 +1,18 @@
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, LinkedList},
     hash::Hash,
     ops::Deref,
     rc::Rc,
+    todo,
 };
 
 use common_game::{
     components::resource::{
         BasicResource, BasicResourceType, ComplexResource, ComplexResourceRequest,
-        ComplexResourceType, GenericResource,
+        ComplexResourceType,
+        GenericResource::{self, ComplexResources},
+        ResourceType,
     },
     protocols::{
         orchestrator_explorer::*,
@@ -20,6 +23,7 @@ use common_game::{
 use crossbeam_channel::{Receiver, Sender};
 use explorer_common::{AiReturn, Bag, BagContent};
 use explorer_common::{Explorer as ExplorerTrait, logged_channel::LoggedChannel};
+use log::info;
 
 #[derive(Clone, Debug)]
 struct PlanetNode(Rc<RefCell<Planet>>);
@@ -99,7 +103,7 @@ impl Planet {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct PlanetInfo {
     generates: HashSet<BasicResourceType>,
     produces: HashSet<ComplexResourceType>,
@@ -168,6 +172,52 @@ impl PlanetMap {
 
     fn get(&self, key: &ID) -> Option<&PlanetNode> {
         self.0.get(key)
+    }
+
+    /// Try to compute the shortest path to a node that matches the conditions in op.
+    /// The path is inclusive of `start` and `end`
+    fn find_path<F: FnMut(&PlanetNode) -> bool>(
+        start: &PlanetNode,
+        op: F,
+    ) -> Option<LinkedList<PlanetNode>> {
+        fn compute_path<F: FnMut(&PlanetNode) -> bool>(
+            prev_nodes: LinkedList<PlanetNode>,
+            current_node: &PlanetNode,
+            mut op: F,
+        ) -> Option<LinkedList<PlanetNode>> {
+            let mut solution: Option<LinkedList<PlanetNode>> = None;
+            for neighbor in &current_node.borrow().neighbors {
+                //We don't want loops
+                if prev_nodes.contains(&neighbor) {
+                    continue;
+                }
+
+                let mut current_path = prev_nodes.clone();
+                current_path.push_back(neighbor.clone());
+
+                if op(neighbor) {
+                    return Some(current_path);
+                }
+                solution = match (solution, compute_path(current_path, neighbor, &mut op)) {
+                    (Some(prev_solution), Some(new_solution)) => {
+                        if new_solution.len() < prev_solution.len() {
+                            Some(new_solution)
+                        } else {
+                            Some(prev_solution)
+                        }
+                    }
+                    (None, Some(new_solution)) => Some(new_solution),
+                    (prev_solution, None) => prev_solution,
+                };
+            }
+            solution
+        }
+
+        compute_path(LinkedList::new(), start, op)
+    }
+
+    fn find_path_to_node(start: &PlanetNode, end: &PlanetNode) -> Option<LinkedList<PlanetNode>> {
+        PlanetMap::find_path(start, |node| node == end)
     }
 }
 
@@ -354,6 +404,48 @@ impl Explorer {
         }
         Ok(())
     }
+
+    fn traverse_path(&mut self, path: LinkedList<PlanetNode>) -> Result<bool, AiReturn> {
+        for step in path.into_iter().skip(1) {
+            if !self.travel_to_planet_request(step)? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+}
+
+fn get_prerequisites(resource: ComplexResourceType) -> HashMap<ResourceType, usize> {
+    match resource {
+        ComplexResourceType::Water => [
+            (ResourceType::Basic(BasicResourceType::Oxygen), 1),
+            (ResourceType::Basic(BasicResourceType::Hydrogen), 1),
+        ]
+        .into(),
+        ComplexResourceType::Diamond => {
+            [(ResourceType::Basic(BasicResourceType::Carbon), 2)].into()
+        }
+        ComplexResourceType::Life => [
+            (ResourceType::Basic(BasicResourceType::Carbon), 1),
+            (ResourceType::Complex(ComplexResourceType::Water), 1),
+        ]
+        .into(),
+        ComplexResourceType::Dolphin => [
+            (ResourceType::Complex(ComplexResourceType::Water), 1),
+            (ResourceType::Complex(ComplexResourceType::Life), 1),
+        ]
+        .into(),
+        ComplexResourceType::Robot => [
+            (ResourceType::Complex(ComplexResourceType::Life), 1),
+            (ResourceType::Basic(BasicResourceType::Silicon), 1),
+        ]
+        .into(),
+        ComplexResourceType::AIPartner => [
+            (ResourceType::Complex(ComplexResourceType::Robot), 1),
+            (ResourceType::Complex(ComplexResourceType::Diamond), 1),
+        ]
+        .into(),
+    }
 }
 
 impl ExplorerTrait for Explorer {
@@ -464,10 +556,8 @@ impl ExplorerTrait for Explorer {
                             explorer.travel_to_planet_request(source_planet)?;
                         }
                         None => {
-                            log::info!(
-                                "All planets in the galaxy explored.",
-                            );
-                        },
+                            log::info!("All planets in the galaxy explored.",);
+                        }
                     }
 
                     return Ok(());
@@ -476,16 +566,70 @@ impl ExplorerTrait for Explorer {
                 }
             }
         }
-        match explore_recursive(self, None) {
-            Ok(()) => {
-                log::trace!(
-                    "Done exploring the galaxy. galaxy contents: \n{:?}",
-                    self.map.0
-                );
-                AiReturn::Kill
-            }
-            Err(err) => err,
+
+        //Reset the map. It is probable a lot has changed if we have been paused.
+        let current_plent_id = self.current_planet.borrow().id;
+        self.map = PlanetMap(HashMap::from([(
+            current_plent_id,
+            self.current_planet.clone(),
+        )]));
+
+        if let Err(err) = explore_recursive(self, None) {
+            return err;
         }
+
+        //Now that we have explored the map, we may have fun
+        let wanted_resources = [
+            (ResourceType::Basic(BasicResourceType::Carbon), 10),
+            (ResourceType::Basic(BasicResourceType::Hydrogen), 10),
+            (ResourceType::Basic(BasicResourceType::Oxygen), 10),
+            (ResourceType::Basic(BasicResourceType::Silicon), 10),
+        ];
+
+        //Travel to the nearest planet that is of use
+        let mut resource_to_act_on: Option<ResourceType> = None;
+        let path = PlanetMap::find_path(&self.current_planet, |planet| {
+            for (wanted, amount) in wanted_resources {
+                if self.bag.contains(wanted) < amount
+                    && planet.borrow().info.clone().is_some_and(|p_info| {
+                        match wanted {
+                            ResourceType::Basic(basic_resource_type) => {
+                                p_info.generates.contains(&basic_resource_type)
+                            }
+                            ResourceType::Complex(complex_resource_type) => {
+                                //Ensure we can actually build a complex resource
+                                p_info.produces.contains(&complex_resource_type) && {
+                                    get_prerequisites(complex_resource_type).iter().all(
+                                        |(prerequisite, amount)| {
+                                            self.bag.contains(*prerequisite) > *amount
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    })
+                {
+                    resource_to_act_on = Some(wanted);
+                    return true;
+                }
+            }
+            false
+        });
+
+        match path {
+            Some(path) => {
+                info!(
+                    "Selected path {:?}",
+                    path.iter().map(|step| step.borrow().id)
+                );
+                if let Err(err) = self.traverse_path(path) {
+                    return err;
+                };
+            }
+            None => info!("No path selected"),
+        }
+
+        AiReturn::Kill
     }
 
     fn reset(&mut self) {

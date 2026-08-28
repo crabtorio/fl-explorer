@@ -21,7 +21,7 @@ use crossbeam_channel::{Receiver, Sender};
 use explorer_common::{AiReturn, Bag, BagContent};
 use explorer_common::{Explorer as ExplorerTrait, logged_channel::LoggedChannel};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct PlanetNode(Rc<RefCell<Planet>>);
 
 impl Hash for PlanetNode {
@@ -64,6 +64,23 @@ struct Planet {
     info: Option<PlanetInfo>,
 }
 
+impl std::fmt::Debug for Planet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Planet")
+            .field("id", &self.id)
+            .field(
+                "neighbors",
+                &self
+                    .neighbors
+                    .iter()
+                    .map(|node| node.borrow().id)
+                    .collect::<Vec<_>>(),
+            )
+            .field("info", &self.info)
+            .finish()
+    }
+}
+
 impl Planet {
     fn new(id: ID, neighbors: HashSet<PlanetNode>, info: Option<PlanetInfo>) -> Self {
         Self {
@@ -82,6 +99,7 @@ impl Planet {
     }
 }
 
+#[derive(Debug)]
 struct PlanetInfo {
     generates: HashSet<BasicResourceType>,
     produces: HashSet<ComplexResourceType>,
@@ -447,7 +465,13 @@ impl ExplorerTrait for Explorer {
             }
         }
         match explore_recursive(self, self.current_planet.clone()) {
-            Ok(()) => AiReturn::Stop,
+            Ok(()) => {
+                log::info!(
+                    "Done exploring the galaxy. galaxy contents: \n{:?}",
+                    self.map.0
+                );
+                AiReturn::Kill
+            }
             Err(err) => err,
         }
     }

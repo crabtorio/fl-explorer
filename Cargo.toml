@@ -7,3 +7,4 @@ edition = "2024"
 common-game = "3.0.0"
 crossbeam-channel = "0.5.16"
 explorer-common = { git = "https://github.com/crabtorio/explorer-common", branch = "main" }
+log = "0.4.34"

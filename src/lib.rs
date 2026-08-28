@@ -4,7 +4,6 @@ use std::{
     hash::Hash,
     ops::Deref,
     rc::Rc,
-    todo,
 };
 
 use common_game::{
@@ -416,27 +415,24 @@ impl ExplorerTrait for Explorer {
     fn explorer_ai(&mut self) -> explorer_common::AiReturn {
         //Exploration loop.
         //Explore until the entire galaxy is explored.
-        fn explore_recursive(explorer: &mut Explorer) -> Result<(), AiReturn> {
+        fn explore_recursive(explorer: &mut Explorer, source_planet: PlanetNode) -> Result<(), AiReturn> {
             explorer.explore_current_planet()?;
-            loop {
-                //Move to the first unexplored planet
-                let mut all_explored = true;
-                for neighbor in &explorer.current_planet.clone().borrow().neighbors {
-                    if !neighbor.borrow().is_explored() {
-                        all_explored = false;
-                        explorer.travel_to_planet_request(neighbor.clone())?;
-                        break;
-                    }
-                }
-                if all_explored {
-                    return Ok(())
-                } else {
-                    return explore_recursive(explorer);
+            let mut all_explored = true;
+            for neighbor in &explorer.current_planet.clone().borrow().neighbors {
+                if !neighbor.borrow().is_explored() {
+                    explorer.travel_to_planet_request(neighbor.clone())?;
+                    all_explored = false;
+                    break;
                 }
             }
+            if all_explored {
+                explorer.travel_to_planet_request(source_planet)?;
+                return Ok(());
+            } else {
+                return explore_recursive(explorer,explorer.current_planet.clone());
+            }
         }
-
-        match explore_recursive(self) {
+        match explore_recursive(self,self.current_planet.clone()) {
             Ok(()) => AiReturn::Stop,
             Err(err) => err,
         }
@@ -453,4 +449,11 @@ impl ExplorerTrait for Explorer {
 
 // The tested functions were moved to explorer_common
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use common_game::logging::ActorType::Orchestrator;
+
+    fn run_orchestrator_interactive() {
+
+    }
+
+}

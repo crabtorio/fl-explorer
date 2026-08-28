@@ -415,28 +415,37 @@ impl ExplorerTrait for Explorer {
     fn explorer_ai(&mut self) -> explorer_common::AiReturn {
         //Exploration loop.
         //Explore until the entire galaxy is explored.
-        fn explore_recursive(explorer: &mut Explorer, source_planet: PlanetNode) -> Result<(), AiReturn> {
+        fn explore_recursive(
+            explorer: &mut Explorer,
+            source_planet: PlanetNode,
+        ) -> Result<(), AiReturn> {
             loop {
                 explorer.explore_current_planet()?;
                 let mut all_explored = true;
                 for neighbor in &explorer.current_planet.clone().borrow().neighbors {
                     if !neighbor.borrow().is_explored() {
-                        log::info!("Found unexplored planet {}",neighbor.borrow().id);
-                        explorer.travel_to_planet_request(neighbor.clone())?;
-                        all_explored = false;
-                        break;
+                        if explorer.travel_to_planet_request(neighbor.clone())? {
+                            log::info!("Found unexplored planet {}", neighbor.borrow().id);
+                            all_explored = false;
+                            break;
+                        } else {
+                            log::error!("Planet {} refused move, ignoring.", neighbor.borrow().id)
+                        };
                     }
                 }
                 if all_explored {
-                    log::info!("All planets explored here, backtracking to {}",source_planet.borrow().id);
+                    log::info!(
+                        "All planets explored here, backtracking to {}",
+                        source_planet.borrow().id
+                    );
                     explorer.travel_to_planet_request(source_planet)?;
                     return Ok(());
                 } else {
-                    explore_recursive(explorer,explorer.current_planet.clone())?;
+                    explore_recursive(explorer, explorer.current_planet.clone())?;
                 }
             }
         }
-        match explore_recursive(self,self.current_planet.clone()) {
+        match explore_recursive(self, self.current_planet.clone()) {
             Ok(()) => AiReturn::Stop,
             Err(err) => err,
         }
@@ -456,8 +465,5 @@ impl ExplorerTrait for Explorer {
 mod tests {
     use common_game::logging::ActorType::Orchestrator;
 
-    fn run_orchestrator_interactive() {
-
-    }
-
+    fn run_orchestrator_interactive() {}
 }

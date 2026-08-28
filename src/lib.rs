@@ -422,6 +422,7 @@ impl ExplorerTrait for Explorer {
             loop {
                 explorer.explore_current_planet()?;
                 let mut all_explored = true;
+                let initial_planet = explorer.current_planet.clone();
                 for neighbor in &explorer.current_planet.clone().borrow().neighbors {
                     if !neighbor.borrow().is_explored() {
                         if explorer.travel_to_planet_request(neighbor.clone())? {
@@ -441,7 +442,7 @@ impl ExplorerTrait for Explorer {
                     explorer.travel_to_planet_request(source_planet)?;
                     return Ok(());
                 } else {
-                    explore_recursive(explorer, explorer.current_planet.clone())?;
+                    explore_recursive(explorer, initial_planet)?;
                 }
             }
         }

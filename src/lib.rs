@@ -219,16 +219,16 @@ impl Explorer {
         }
     }
 
-    fn travel_to_planet_request(&mut self, planet: PlanetNode) -> Result<bool, AiReturn> {
+    fn travel_to_planet_request(&mut self, planet: &Planet) -> Result<bool, AiReturn> {
         match self
-            .send_orchestrator_request(OrchestratorRequest::TravelToPlanet(planet.borrow().id))?
+            .send_orchestrator_request(OrchestratorRequest::TravelToPlanet(planet.id))?
         {
             OrchestratorResponse::TravelToPlanetResult(Some(new_channel)) => {
                 self.planet_channel.set_sender(new_channel);
                 Ok(true)
             }
             OrchestratorResponse::TravelToPlanetResult(None) => {
-                self.map.remove(&planet.borrow().id);
+                self.map.remove(&planet.id);
                 Ok(false)
             }
             _ => Err(AiReturn::Kill),
@@ -409,7 +409,9 @@ impl ExplorerTrait for Explorer {
             
             explorer.explore_current_planet()?;
             for neighbor in &explorer.current_planet.clone().borrow().neighbors {
-                if !neighbor.borrow().is_explored() {
+                let neighbor = neighbor.borrow(); 
+                if !neighbor.is_explored() {
+                    explorer.travel_to_planet_request(&neighbor)?;
                     explore_recursive(explorer)?;
                 }
             };
@@ -435,5 +437,5 @@ impl ExplorerTrait for Explorer {
 // The tested functions were moved to explorer_common
 #[cfg(test)]
 mod tests {
-    
+
 }

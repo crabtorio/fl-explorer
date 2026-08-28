@@ -426,6 +426,7 @@ impl ExplorerTrait for Explorer {
                 }
             }
             if all_explored {
+                log::info!("All planets explored here, backtracking...");
                 explorer.travel_to_planet_request(source_planet)?;
                 return Ok(());
             } else {

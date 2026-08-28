@@ -418,14 +418,22 @@ impl ExplorerTrait for Explorer {
         //Explore until the entire galaxy is explored.
         fn explore_recursive(explorer: &mut Explorer) -> Result<(), AiReturn> {
             explorer.explore_current_planet()?;
-            for neighbor in &explorer.current_planet.clone().borrow().neighbors {
-                if !neighbor.borrow().is_explored() {
-                    explorer.travel_to_planet_request(neighbor.clone())?;
-                    explore_recursive(explorer)?;
+            loop {
+                //Move to the first unexplored planet
+                let mut all_explored = true;
+                for neighbor in &explorer.current_planet.clone().borrow().neighbors {
+                    if !neighbor.borrow().is_explored() {
+                        all_explored = false;
+                        explorer.travel_to_planet_request(neighbor.clone())?;
+                        break;
+                    }
+                }
+                if all_explored {
+                    return Ok(())
+                } else {
+                    return explore_recursive(explorer);
                 }
             }
-
-            Ok(())
         }
 
         match explore_recursive(self) {

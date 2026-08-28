@@ -219,16 +219,16 @@ impl Explorer {
         }
     }
 
-    fn travel_to_planet_request(&mut self, planet: &Planet) -> Result<bool, AiReturn> {
-        match self
-            .send_orchestrator_request(OrchestratorRequest::TravelToPlanet(planet.id))?
-        {
+    fn travel_to_planet_request(&mut self, planet: PlanetNode) -> Result<bool, AiReturn> {
+        let planet_id = planet.borrow().id;
+        match self.send_orchestrator_request(OrchestratorRequest::TravelToPlanet(planet_id))? {
             OrchestratorResponse::TravelToPlanetResult(Some(new_channel)) => {
                 self.planet_channel.set_sender(new_channel);
+                self.current_planet = planet;
                 Ok(true)
             }
             OrchestratorResponse::TravelToPlanetResult(None) => {
-                self.map.remove(&planet.id);
+                self.map.remove(&planet_id);
                 Ok(false)
             }
             _ => Err(AiReturn::Kill),
@@ -402,26 +402,23 @@ impl ExplorerTrait for Explorer {
     }
 
     fn explorer_ai(&mut self) -> explorer_common::AiReturn {
-        
         //Exploration loop.
         //Explore until the entire galaxy is explored.
-        fn explore_recursive(explorer: &mut Explorer) -> Result<(),AiReturn>{
-            
+        fn explore_recursive(explorer: &mut Explorer) -> Result<(), AiReturn> {
             explorer.explore_current_planet()?;
             for neighbor in &explorer.current_planet.clone().borrow().neighbors {
-                let neighbor = neighbor.borrow(); 
-                if !neighbor.is_explored() {
-                    explorer.travel_to_planet_request(&neighbor)?;
+                if !neighbor.borrow().is_explored() {
+                    explorer.travel_to_planet_request(neighbor.clone())?;
                     explore_recursive(explorer)?;
                 }
-            };
-            
+            }
+
             Ok(())
         }
 
         match explore_recursive(self) {
             Ok(()) => AiReturn::Stop,
-            Err(err) => err
+            Err(err) => err,
         }
     }
 
@@ -436,6 +433,4 @@ impl ExplorerTrait for Explorer {
 
 // The tested functions were moved to explorer_common
 #[cfg(test)]
-mod tests {
-
-}
+mod tests {}

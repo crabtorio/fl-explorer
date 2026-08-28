@@ -225,10 +225,22 @@ impl Explorer {
             OrchestratorResponse::TravelToPlanetResult(Some(new_channel)) => {
                 self.planet_channel.set_sender(new_channel);
                 self.current_planet = planet;
+                self.orchestrator_channel
+                    .send(ExplorerToOrchestrator::MovedToPlanetResult {
+                        explorer_id: self.id,
+                        planet_id,
+                    })
+                    .map_err(|_| AiReturn::Kill)?;
                 Ok(true)
             }
             OrchestratorResponse::TravelToPlanetResult(None) => {
                 self.map.remove(&planet_id);
+                self.orchestrator_channel
+                    .send(ExplorerToOrchestrator::MovedToPlanetResult {
+                        explorer_id: self.id,
+                        planet_id: self.current_planet.borrow().id,
+                    })
+                    .map_err(|_| AiReturn::Kill)?;
                 Ok(false)
             }
             _ => Err(AiReturn::Kill),

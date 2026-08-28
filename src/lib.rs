@@ -154,6 +154,15 @@ impl PlanetMap {
     }
 }
 
+impl Drop for PlanetMap {
+    fn drop(&mut self) {
+        for (_, planet) in &mut self.0 {
+            //Clear the references amongst planets before dropping the map
+            planet.borrow_mut().neighbors = HashSet::new();
+        }
+    }
+}
+
 pub struct Explorer {
     id: ID,
     bag: Bag,
@@ -306,11 +315,11 @@ impl Explorer {
             match self.map.get(&neighbor_id) {
                 Some(known_planet) => {
                     self.current_planet.connect(known_planet);
-                },
+                }
                 None => self.map.insert(Planet::new(
                     neighbor_id,
                     HashSet::from([self.current_planet.clone()]),
-                    None
+                    None,
                 )),
             };
         }
@@ -393,11 +402,15 @@ impl ExplorerTrait for Explorer {
     }
 
     fn explorer_ai(&mut self) -> explorer_common::AiReturn {
-        todo!();
+        todo!()
     }
 
     fn reset(&mut self) {
-        todo!()
+        self.bag = Bag::new();
+        self.map = PlanetMap(HashMap::from([(
+            self.current_planet.borrow().id,
+            self.current_planet.clone(),
+        )]));
     }
 }
 
